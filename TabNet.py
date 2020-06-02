@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import torch
 import torch.nn as nn
 import torch
@@ -13,10 +10,7 @@ import numpy as np
 from sparsemax import Sparsemax
 sparsemax = Sparsemax(dim=1)
 
-
-# In[6]:
-
-
+# GLU 
 def glu(act, n_units):
     
     act[:, :n_units] = act[:, :n_units].clone() * torch.nn.Sigmoid()(act[:, n_units:].clone())     
@@ -52,7 +46,6 @@ class TabNetModel(nn.Module):
         self.num_classes = num_classes
         self.epsilon = epsilon
         
-        
         self.feature_transform_linear1 = torch.nn.Linear(num_features, self.feature_dims * 2, bias=False)
         self.BN = torch.nn.BatchNorm1d(num_features, momentum = batch_momentum)
         self.BN1 = torch.nn.BatchNorm1d(self.feature_dims * 2, momentum = batch_momentum)
@@ -66,7 +59,6 @@ class TabNetModel(nn.Module):
         
         self.final_classifier_layer = torch.nn.Linear(self.output_dim, self.num_classes, bias=False)
     
-    
     def encoder(self, data):
         
         batch_size = data.shape[0]
@@ -79,9 +71,7 @@ class TabNetModel(nn.Module):
         aggregated_mask_values = torch.zeros([batch_size, self.num_features])
         complemantary_aggregated_mask_values =torch.ones([batch_size, self.num_features])
         
-        
         total_entropy = 0
-
 
         for ni in range(self.num_decision_steps):
             
@@ -102,7 +92,6 @@ class TabNetModel(nn.Module):
                 norm_transform_f2 = self.BN1(transform_f2)
 
                 # GLU 
-                
                 transform_f2 = (glu(norm_transform_f2, self.feature_dims) +transform_f1) * np.sqrt(0.5)
 
                 transform_f3 = self.feature_transform_linear3(transform_f2)
@@ -112,17 +101,11 @@ class TabNetModel(nn.Module):
                 norm_transform_f4 = self.BN1(transform_f4)
 
                 # GLU
-                
                 transform_f4 = (glu(norm_transform_f4, self.feature_dims) + transform_f3) * np.sqrt(0.5)
-
                 
                 decision_out = torch.nn.ReLU(inplace=True)(transform_f4[:, :self.output_dim])
-
-
                 # Decision aggregation
-                
                 output_aggregated  = torch.add(decision_out, output_aggregated)
-
                 scale_agg = torch.sum(decision_out, axis=1, keepdim=True) / (self.num_decision_steps - 1)
                 aggregated_mask_values  = torch.add( aggregated_mask_values, mask_values * scale_agg)
 
@@ -133,15 +116,12 @@ class TabNetModel(nn.Module):
                     mask_linear_layer = self.mask_linear_layer(features_for_coef)
                     mask_linear_norm = self.BN2(mask_linear_layer)
                     mask_linear_norm  = torch.mul(mask_linear_norm, complemantary_aggregated_mask_values)
-
                     mask_values = sparsemax(mask_linear_norm)
+                    
                     complemantary_aggregated_mask_values = torch.mul(complemantary_aggregated_mask_values,self.relaxation_factor - mask_values)
-
                     total_entropy = torch.add(total_entropy,torch.mean(torch.sum(-mask_values * torch.log(mask_values + self.epsilon),axis=1)) / (self.num_decision_steps - 1))
-
                     masked_features = torch.mul(mask_values , features)
-            
-        
+           
         return  output_aggregated, total_entropy
      
     def classify(self, output_logits):
@@ -150,37 +130,4 @@ class TabNetModel(nn.Module):
         predictions = torch.nn.Softmax(dim=1)(logits)
 
         return logits, predictions
-        
        
-        
-
-
-# In[7]:
-
-
-t = TabNetModel()
-
-
-# In[8]:
-
-
-k = t.encoder(torch.Tensor([[1,3,4],[1,13,4],[1,13,4],[1,3,4],[1,3,4]]))
-
-
-# In[9]:
-
-
-t.classify(k[0])
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
